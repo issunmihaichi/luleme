@@ -43,11 +43,18 @@ android {
     }
 }
 
-// Force use of ARM64 binaries for AAPT2 in Proot environment
-configurations.all {
-    resolutionStrategy.eachDependency {
-        if (requested.group == "com.android.tools.build" && requested.name == "aapt2") {
-            useTarget("com.android.tools.build:aapt2:${'$'}{requested.version}:linux-aarch64")
+// Force use of ARM64 binaries for AAPT2 in Proot/Termux environment (ARM64 only).
+// On x86_64 hosts (e.g. GitHub Actions CI) the default AAPT2 is used instead.
+val isArm64 = System.getProperty("os.arch")?.lowercase()?.let {
+    it == "aarch64" || it.contains("arm64") || it.startsWith("arm")
+} == true
+
+if (isArm64) {
+    configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "com.android.tools.build" && requested.name == "aapt2") {
+                useTarget("com.android.tools.build:aapt2:${'$'}{requested.version}:linux-aarch64")
+            }
         }
     }
 }
