@@ -57,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.java.myapplication.data.SessionRecord
@@ -92,6 +93,7 @@ fun ReportScreen(
     var type by remember { mutableStateOf(ReportType.WEEK) }
     val stats = remember(records, type) { computeStats(records, type) }
     val genres = remember(records, type) { collectGenres(records, type) }
+    val rankings = remember(records, type) { computeRankings(records, type) }
 
     // 统计数字滚动动画（切换页签时旧值滚动到新值）
     val animCount by animateIntAsState(stats.count, tween(500), label = "count")
@@ -148,6 +150,7 @@ fun ReportScreen(
                     type = t,
                     stats = stats,
                     genres = genres,
+                    rankings = rankings,
                     count = animCount,
                     total = animTotal,
                     avg = animAvg,
@@ -163,6 +166,7 @@ private fun ReportContent(
     type: ReportType,
     stats: ReportStats,
     genres: List<String>,
+    rankings: Rankings,
     count: Int,
     total: Int,
     avg: Int,
@@ -274,6 +278,68 @@ private fun ReportContent(
                     )
                 }
             }
+        }
+
+        // 排行榜：标签 / 女優 / 单次时长
+        if (rankings.byGenre.isNotEmpty() || rankings.byActress.isNotEmpty() || rankings.byDuration.isNotEmpty()) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        text = "排行榜",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    if (rankings.byGenre.isNotEmpty()) {
+                        RankSection("🏷 热门标签", rankings.byGenre) { "×${it.count}" }
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    if (rankings.byActress.isNotEmpty()) {
+                        RankSection("👩 热门女優", rankings.byActress) { "×${it.count}" }
+                        Spacer(Modifier.height(10.dp))
+                    }
+                    if (rankings.byDuration.isNotEmpty()) {
+                        RankSection("⏱ 单次最长", rankings.byDuration) { "${it.minutes} 分钟" }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RankSection(title: String, entries: List<RankEntry>, suffix: (RankEntry) -> String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.SemiBold
+    )
+    Spacer(Modifier.height(4.dp))
+    entries.forEachIndexed { i, e ->
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${i + 1}.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.width(24.dp)
+            )
+            Text(
+                text = e.name,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = suffix(e),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Medium
+            )
         }
     }
 }
@@ -460,6 +526,55 @@ private fun percent(diff: Int, base: Int): String =
 
 /** 收集当前周期（周/月/年）内所有记录解析出的 XP 标签，去重保序 */
 private fun collectGenres(records: List<SessionRecord>, type: ReportType): List<String> {
+    val cur = currentPeriod(records, type)
+    return cur
+        .flatMap { it.genres }
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+/** 排行榜数据：名称 → 次数/时长 */
+data class RankEntry(val name: String, val count: Int, val minutes: Int)
+
+/**
+ * 统计当前周期内各维度排行：
+ * - byGenre:  按标签（ジャンル）出现次数
+ * - byActress:按女優出现次数
+ * - byDuration:按单次记录时长（Top N 单次最长）
+ */
+private fun computeRankings(records: List<SessionRecord>, type: ReportType): Rankings {
+    val cur = currentPeriod(records, type)
+    return Rankings(
+        byGenre = rankByCount(cur.flatMap { r -> r.genres.map { it.trim() } }
+            .filter { it.isNotBlank() }),
+        byActress = rankByCount(cur.map { it.actress.trim() }.filter { it.isNotBlank() }),
+        byDuration = cur.sortedByDescending { it.durationMin }
+            .take(5)
+            .mapIndexed { i, r -> RankEntry(
+                name = r.title.ifBlank { r.code }.ifBlank { r.note }.ifBlank { "${r.durationMin}分钟" },
+                count = 0,
+                minutes = r.durationMin
+            ) }
+    )
+}
+
+data class Rankings(
+    val byGenre: List<RankEntry>,
+    val byActress: List<RankEntry>,
+    val byDuration: List<RankEntry>
+)
+
+/** 按出现次数降序统计 Top N（并列按名称排序） */
+private fun rankByCount(items: List<String>, top: Int = 5): List<RankEntry> =
+    items.groupingBy { it }.eachCount()
+        .toList()
+        .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
+        .take(top)
+        .map { (name, count) -> RankEntry(name, count, 0) }
+
+/** 当前周期记录（与 computeStats 的周期边界一致：WEEK 周一 0 点起，MONTH 1 号，YEAR 1/1） */
+private fun currentPeriod(records: List<SessionRecord>, type: ReportType): List<SessionRecord> {
     fun dayStart(c: Calendar): Calendar = c.apply {
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
@@ -485,10 +600,5 @@ private fun collectGenres(records: List<SessionRecord>, type: ReportType): List<
             end = (start.clone() as Calendar).apply { add(Calendar.YEAR, 1) }
         }
     }
-    return records
-        .filter { it.timestamp in start.timeInMillis until end.timeInMillis }
-        .flatMap { it.genres }
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
+    return records.filter { it.timestamp in start.timeInMillis until end.timeInMillis }
 }
