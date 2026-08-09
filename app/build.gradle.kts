@@ -23,10 +23,26 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            // debug 也用固定签名，确保各环境（CI/本地/proot）构建的 APK 签名一致，覆盖更新不冲突
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
+
+    // 固定签名 keystore：keystore/luleme-release.p12（PKCS12）
+    // 所有构建（debug/release）用同一签名，解决"每次更新签名冲突"问题
+    signingConfigs {
+        create("release") {
+            storeFile = file("keystore/luleme-release.p12")
+            storePassword = "luleme2026"
+            keyAlias = "1"
+            keyPassword = "luleme2026"
         }
     }
     compileOptions {
