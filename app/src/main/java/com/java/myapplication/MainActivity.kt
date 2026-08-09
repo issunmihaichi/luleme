@@ -95,36 +95,36 @@ fun LuleApp() {
         if (xpMode && isMissav && host != null) {
             if (webViewFetcher.isBusy) {
                 Toast.makeText(context, "XP：正在抓取上一条，请稍后再试", Toast.LENGTH_SHORT).show()
-                return@persistAndScrape
-            }
-            // 用白名单校验过的 host 重建规范化 https URL，避免校验与请求解析器分歧
-            val path = uri.encodedPath.orEmpty()
-            val query = uri.encodedQuery?.let { "?$it" }.orEmpty()
-            val safeUrl = "https://$host$path$query"
-            // missav 是 JS 渲染 + WAF 反爬，必须用 WebView（浏览器内核）加载渲染后取 DOM
-            webViewFetcher.fetch(safeUrl) { html ->
-                if (html == null) {
-                    Toast.makeText(context, "XP：抓取 missav 失败（网络或页面被拦截）", Toast.LENGTH_LONG).show()
-                    return@fetch
-                }
-                scope.launch {
-                    val meta = withContext(Dispatchers.IO) { MissavScraper.parseHtml(html) }
-                    // 仅当抓到至少一个有效字段时才回填，避免用空值覆盖用户已填内容
-                    if (meta != null && (meta.title.isNotBlank() || meta.code.isNotBlank() ||
-                            meta.actress.isNotBlank() || meta.genres.isNotEmpty())
-                    ) {
-                        store.update(
-                            r.copy(
-                                title = meta.title,
-                                code = meta.code,
-                                actress = meta.actress,
-                                genres = meta.genres
+            } else {
+                // 用白名单校验过的 host 重建规范化 https URL，避免校验与请求解析器分歧
+                val path = uri.encodedPath.orEmpty()
+                val query = uri.encodedQuery?.let { "?$it" }.orEmpty()
+                val safeUrl = "https://$host$path$query"
+                // missav 是 JS 渲染 + WAF 反爬，必须用 WebView（浏览器内核）加载渲染后取 DOM
+                webViewFetcher.fetch(safeUrl) { html ->
+                    if (html == null) {
+                        Toast.makeText(context, "XP：抓取 missav 失败（网络或页面被拦截）", Toast.LENGTH_LONG).show()
+                        return@fetch
+                    }
+                    scope.launch {
+                        val meta = withContext(Dispatchers.IO) { MissavScraper.parseHtml(html) }
+                        // 仅当抓到至少一个有效字段时才回填，避免用空值覆盖用户已填内容
+                        if (meta != null && (meta.title.isNotBlank() || meta.code.isNotBlank() ||
+                                meta.actress.isNotBlank() || meta.genres.isNotEmpty())
+                        ) {
+                            store.update(
+                                r.copy(
+                                    title = meta.title,
+                                    code = meta.code,
+                                    actress = meta.actress,
+                                    genres = meta.genres
+                                )
                             )
-                        )
-                        records = store.load()
-                        Toast.makeText(context, "XP：已抓取 ${meta.title.ifBlank { meta.code }}", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, "XP：页面解析不到视频信息", Toast.LENGTH_LONG).show()
+                            records = store.load()
+                            Toast.makeText(context, "XP：已抓取 ${meta.title.ifBlank { meta.code }}", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "XP：页面解析不到视频信息", Toast.LENGTH_LONG).show()
+                        }
                     }
                 }
             }
