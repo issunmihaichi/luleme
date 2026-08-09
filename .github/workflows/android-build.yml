@@ -72,5 +72,7 @@ jobs:
             自动构建 #${{ github.run_number }}
             commit: ${{ github.sha }}
             APK 已签名（CN=Luleme），可直接下载安装。
+            ⚠️ 请在本 Release 页面下载下方的 app-debug.apk（直接 APK 文件）。
+            不要从 Actions 标签页的 "app-debug-apk" artifact 下载——那会被 GitHub 打包成 zip。
           files: app/build/outputs/apk/debug/app-debug.apk
           generate_release_notes: false
