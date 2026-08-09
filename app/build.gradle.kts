@@ -1,15 +1,31 @@
 import java.security.KeyStore
+import java.util.Properties
 
-// 从固定 keystore 读取私钥条目别名（不硬编码，避免 PKCS12 别名不一致导致签名失败）
+// 签名凭据：keystore 与密码均不入库。
+// - keystore：默认 keystore/luleme-release.p12（已 gitignore），可用环境变量 KEYSTORE_PATH 覆盖（CI 注入）
+// - 密码：优先 local.properties 的 keyStorePassword（已 gitignore），其次环境变量 KEYSTORE_PASSWORD（CI secrets）
+val keystoreProperties = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val keyStorePassword: String = keystoreProperties.getProperty("keyStorePassword")
+    ?: System.getenv("KEYSTORE_PASSWORD")
+    ?: error("签名密码缺失：请在 local.properties 设置 keyStorePassword 或设置环境变量 KEYSTORE_PASSWORD")
+
+val keyStoreFile: File = System.getenv("KEYSTORE_PATH")?.let { rootProject.file(it) }
+    ?: rootProject.file("keystore/luleme-release.p12")
+
+// 从 keystore 读取私钥条目别名（不硬编码，避免 PKCS12 别名不一致导致签名失败）
 // 必须定义在 android{} 之前，否则 signingConfigs 闭包前向引用未初始化
 val signingKeyAlias: String = try {
     val ks = KeyStore.getInstance("PKCS12")
-    rootProject.file("keystore/luleme-release.p12").inputStream().use { ks.load(it, "luleme2026".toCharArray()) }
+    keyStoreFile.inputStream().use { ks.load(it, keyStorePassword.toCharArray()) }
     val aliases = ks.aliases()
     generateSequence { if (aliases.hasMoreElements()) aliases.nextElement() else null }
-        .firstOrNull { ks.isKeyEntry(it) } ?: "1"
+        .firstOrNull { ks.isKeyEntry(it) }
+        ?: error("keystore 中找不到私钥条目: $keyStoreFile")
 } catch (e: Exception) {
-    "1"
+    error("无法读取签名 keystore $keyStoreFile：${e.message}")
 }
 
 plugins {
@@ -34,15 +50,15 @@ android {
         }
     }
 
-    // 固定签名 keystore：keystore/luleme-release.p12（PKCS12）
+    // 固定签名 keystore（不入库）：keystore/luleme-release.p12（PKCS12）
     // 所有构建（debug/release）用同一签名，解决"每次更新签名冲突"问题
     // 注意：signingConfigs 必须先于 buildTypes 声明，否则 getByName 找不到
     signingConfigs {
         create("release") {
-            storeFile = rootProject.file("keystore/luleme-release.p12")
-            storePassword = "luleme2026"
+            storeFile = keyStoreFile
+            storePassword = keyStorePassword
             keyAlias = signingKeyAlias
-            keyPassword = "luleme2026"
+            keyPassword = keyStorePassword
         }
     }
 

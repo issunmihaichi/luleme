@@ -11,6 +11,8 @@ jobs:
   build:
     name: Build debug APK
     runs-on: ubuntu-latest
+    env:
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
 
     steps:
       - name: Checkout
@@ -24,6 +26,18 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
+
+      - name: Set up signing keystore from secrets
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            mkdir -p keystore
+            echo "$KEYSTORE_B64" | base64 -d > keystore/luleme-release.p12
+            echo "keystore restored ($(stat -c%s keystore/luleme-release.p12) bytes)"
+          else
+            echo "WARNING: KEYSTORE_B64 secret not set; skipping keystore restore"
+          fi
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
 
       - name: Build debug APK
         run: |

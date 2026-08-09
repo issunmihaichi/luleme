@@ -15,3 +15,7 @@
 local.properties
 .reasonix/
 reasonix.toml
+keystore/
+*.p12
+*.jks
+*.keystore
