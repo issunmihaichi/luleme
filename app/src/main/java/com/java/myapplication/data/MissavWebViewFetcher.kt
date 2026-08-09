@@ -35,10 +35,10 @@ class MissavWebViewFetcher(private val context: Context) {
 
     companion object {
         private const val TAG = "MissavWebViewFetcher"
-        private const val TIMEOUT_MS = 25_000L      // 总超时
+        private const val TIMEOUT_MS = 40_000L      // 总超时（WAF 挑战 + JS 渲染可能需要更久）
         private const val RENDER_WAIT_MS = 4_000L   // onPageFinished 后等 JS 渲染
-        private const val RETRY_WAIT_MS = 3_000L     // 内容为空时再等
-        private const val MAX_ATTEMPTS = 3
+        private const val RETRY_WAIT_MS = 2_000L     // 内容为空时再轮询
+        private const val MAX_ATTEMPTS = 5
     }
 
     /** 在主线程调用；onResult 收到渲染后的页面 HTML（失败/超时为 null） */
