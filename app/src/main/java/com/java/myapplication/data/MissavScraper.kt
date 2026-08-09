@@ -108,7 +108,7 @@ object MissavScraper {
                     null
                 }
             } ?: return@forEach
-            val type = obj.optString("@type").lowercase()
+            val type = obj.opt("@type")?.toString()?.lowercase() ?: ""
             if (type.contains("videoobject") || type.contains("movie") || obj.has("genre")) {
                 return obj
             }
