@@ -37,6 +37,7 @@ object MissavScraper {
             .timeout(10_000)
             .userAgent(USER_AGENT)
             .referrer("https://missav.ws/")
+            .followRedirects(false) // 保持 host 白名单语义，不跟随到白名单外域名
             .get()
         buildMeta(doc)
     } catch (e: Exception) {
