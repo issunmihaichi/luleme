@@ -2,6 +2,7 @@ package com.java.myapplication
 
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -92,10 +93,16 @@ fun LuleApp() {
         val host = uri?.host?.lowercase()
         val scheme = uri?.scheme?.lowercase()
         val isMissav = (scheme == "https" || scheme == "http") && MissavUrls.isAllowedHost(host)
+        // 诊断：无论开关/域名如何都弹 Toast 并记日志，便于定位"为什么没抓取"
+        val urlForDiag = r.url.ifBlank { "(空)" }
+        val diag = "XP诊断: 开关=$xpMode · host=$host · 域名识别=$isMissav · url=$urlForDiag"
+        Log.i("XPDiag", diag)
+        Toast.makeText(context, diag, Toast.LENGTH_LONG).show()
         if (xpMode && isMissav && host != null) {
             if (webViewFetcher.isBusy) {
                 Toast.makeText(context, "XP：正在抓取上一条，请稍后再试", Toast.LENGTH_SHORT).show()
             } else {
+                Toast.makeText(context, "XP：开始抓取 missav 中…", Toast.LENGTH_SHORT).show()
                 // 用白名单校验过的 host 重建规范化 https URL，避免校验与请求解析器分歧
                 val path = uri.encodedPath.orEmpty()
                 val query = uri.encodedQuery?.let { "?$it" }.orEmpty()
