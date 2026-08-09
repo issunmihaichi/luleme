@@ -27,7 +27,7 @@ android {
     // 注意：signingConfigs 必须先于 buildTypes 声明，否则 getByName 找不到
     signingConfigs {
         create("release") {
-            storeFile = file("keystore/luleme-release.p12")
+            storeFile = rootProject.file("keystore/luleme-release.p12")
             storePassword = "luleme2026"
             keyAlias = signingKeyAlias
             keyPassword = "luleme2026"
@@ -81,7 +81,7 @@ if (isArm64) {
 // 从固定 keystore 读取私钥条目别名（不硬编码，避免 PKCS12 别名不一致导致签名失败）
 val signingKeyAlias: String = try {
     val ks = KeyStore.getInstance("PKCS12")
-    file("keystore/luleme-release.p12").inputStream().use { ks.load(it, "luleme2026".toCharArray()) }
+    rootProject.file("keystore/luleme-release.p12").inputStream().use { ks.load(it, "luleme2026".toCharArray()) }
     val aliases = ks.aliases()
     generateSequence { if (aliases.hasMoreElements()) aliases.nextElement() else null }
         .firstOrNull { ks.isKeyEntry(it) } ?: "1"
