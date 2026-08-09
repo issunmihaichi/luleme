@@ -1,3 +1,5 @@
+import java.security.KeyStore
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -77,7 +79,7 @@ if (isArm64) {
 
 // 从固定 keystore 读取私钥条目别名（不硬编码，避免 PKCS12 别名不一致导致签名失败）
 val signingKeyAlias: String = try {
-    val ks = java.security.KeyStore.getInstance("PKCS12")
+    val ks = KeyStore.getInstance("PKCS12")
     file("keystore/luleme-release.p12").inputStream().use { ks.load(it, "luleme2026".toCharArray()) }
     val aliases = ks.aliases()
     generateSequence { if (aliases.hasMoreElements()) aliases.nextElement() else null }
