@@ -39,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.java.myapplication.data.MissavScraper
+import com.java.myapplication.data.MissavWebViewFetcher
 import com.java.myapplication.data.RecordStore
 import com.java.myapplication.data.SessionRecord
 import com.java.myapplication.ui.AddRecordDialog
@@ -70,12 +71,13 @@ fun LuleApp() {
     val context = LocalContext.current
     val store = remember { RecordStore(context.applicationContext) }
     val scope = rememberCoroutineScope()
+    val webViewFetcher = remember { MissavWebViewFetcher(context) }
     var records by remember { mutableStateOf(store.load()) }
     var page by remember { mutableStateOf(AppPage.HOME) }
     var showAddDialog by remember { mutableStateOf(false) }
     var xpMode by remember { mutableStateOf(store.isXpMode()) }
 
-    // 保存记录；XP 开启且 URL 域名含 missav 时，后台抓取页面元数据回填
+    // 保存记录；XP 开启且 URL 域名含 missav 时，用 WebView 抓取页面元数据回填
     val persistAndScrape: (SessionRecord) -> Unit = { r ->
         store.add(r)
         records = store.load()
@@ -90,21 +92,26 @@ fun LuleApp() {
             val path = uri.encodedPath.orEmpty()
             val query = uri.encodedQuery?.let { "?$it" }.orEmpty()
             val safeUrl = "https://$host$path$query"
-            scope.launch {
-                val meta = withContext(Dispatchers.IO) { MissavScraper.parse(safeUrl) }
-                // 仅当抓到至少一个有效字段时才回填，避免用空值覆盖用户已填内容
-                if (meta != null && (meta.title.isNotBlank() || meta.code.isNotBlank() ||
-                        meta.actress.isNotBlank() || meta.genres.isNotEmpty())
-                ) {
-                    store.update(
-                        r.copy(
-                            title = meta.title,
-                            code = meta.code,
-                            actress = meta.actress,
-                            genres = meta.genres
-                        )
-                    )
-                    records = store.load()
+            // missav 是 JS 渲染 + WAF 反爬，必须用 WebView（浏览器内核）加载渲染后取 DOM
+            webViewFetcher.fetch(safeUrl) { html ->
+                if (html != null) {
+                    scope.launch {
+                        val meta = withContext(Dispatchers.IO) { MissavScraper.parseHtml(html) }
+                        // 仅当抓到至少一个有效字段时才回填，避免用空值覆盖用户已填内容
+                        if (meta != null && (meta.title.isNotBlank() || meta.code.isNotBlank() ||
+                                meta.actress.isNotBlank() || meta.genres.isNotEmpty())
+                        ) {
+                            store.update(
+                                r.copy(
+                                    title = meta.title,
+                                    code = meta.code,
+                                    actress = meta.actress,
+                                    genres = meta.genres
+                                )
+                            )
+                            records = store.load()
+                        }
+                    }
                 }
             }
         }

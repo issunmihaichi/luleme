@@ -17,7 +17,9 @@ data class MissavMeta(
 )
 
 /**
- * 抓取 missav 视频页并解析元数据。
+ * 解析 missav 页面 HTML 并提取元数据。
+ * 注意：missav 视频页是 JS 渲染 + WAF 反爬，静态 HTTP 请求（Jsoup.connect）拿不到数据，
+ * 必须用 WebView 加载渲染后读取 outerHTML，再交给本解析器（见 MissavWebViewFetcher）。
  * 解析策略（逐级 fallback）：JSON-LD(VideoObject) → og meta → 页面标签区块(dt/dd, th/td) → 正则。
  * 任何一步失败都安全返回 null，不影响正常记录流程。
  */
@@ -25,25 +27,20 @@ object MissavScraper {
 
     private const val TAG = "MissavScraper"
 
-    private const val USER_AGENT =
-        "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36"
-
     private val CODE_REGEX =
         Regex("\\b([A-Z0-9]{2,10}-\\d{2,7}(?:-[A-Za-z0-9]+)*)\\b", RegexOption.IGNORE_CASE)
 
-    /** 同步阻塞抓取解析，应在 IO 线程调用；失败记录日志并返回 null */
-    fun parse(url: String): MissavMeta? = try {
-        val doc = Jsoup.connect(url)
-            .timeout(10_000)
-            .userAgent(USER_AGENT)
-            .referrer("https://missav.ws/")
-            .followRedirects(false) // 保持 host 白名单语义，不跟随到白名单外域名
-            .get()
-        buildMeta(doc)
+    /** 解析已渲染的页面 HTML（来自 WebView 的 outerHTML），失败返回 null */
+    fun parseHtml(html: String): MissavMeta? = try {
+        if (html.isBlank()) {
+            Log.w(TAG, "parseHtml: empty html")
+            null
+        } else {
+            buildMeta(Jsoup.parse(html))
+        }
     } catch (e: Throwable) {
-        // 捕获 Throwable 兜底：深层嵌套 JSON-LD 等可能抛 Error（如 StackOverflowError），
-        // 不能让未捕获的 Error 在 IO 协程中崩溃应用
-        Log.w(TAG, "missav scrape failed: ${e.javaClass.simpleName}")
+        // 捕获 Throwable 兜底：深层嵌套 JSON-LD 等可能抛 Error（如 StackOverflowError）
+        Log.w(TAG, "parseHtml failed: ${e.javaClass.simpleName}")
         null
     }
 
