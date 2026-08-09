@@ -1,5 +1,17 @@
 import java.security.KeyStore
 
+// 从固定 keystore 读取私钥条目别名（不硬编码，避免 PKCS12 别名不一致导致签名失败）
+// 必须定义在 android{} 之前，否则 signingConfigs 闭包前向引用未初始化
+val signingKeyAlias: String = try {
+    val ks = KeyStore.getInstance("PKCS12")
+    rootProject.file("keystore/luleme-release.p12").inputStream().use { ks.load(it, "luleme2026".toCharArray()) }
+    val aliases = ks.aliases()
+    generateSequence { if (aliases.hasMoreElements()) aliases.nextElement() else null }
+        .firstOrNull { ks.isKeyEntry(it) } ?: "1"
+} catch (e: Exception) {
+    "1"
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -76,17 +88,6 @@ if (isArm64) {
             }
         }
     }
-}
-
-// 从固定 keystore 读取私钥条目别名（不硬编码，避免 PKCS12 别名不一致导致签名失败）
-val signingKeyAlias: String = try {
-    val ks = KeyStore.getInstance("PKCS12")
-    rootProject.file("keystore/luleme-release.p12").inputStream().use { ks.load(it, "luleme2026".toCharArray()) }
-    val aliases = ks.aliases()
-    generateSequence { if (aliases.hasMoreElements()) aliases.nextElement() else null }
-        .firstOrNull { ks.isKeyEntry(it) } ?: "1"
-} catch (e: Exception) {
-    "1"
 }
 
 dependencies {
