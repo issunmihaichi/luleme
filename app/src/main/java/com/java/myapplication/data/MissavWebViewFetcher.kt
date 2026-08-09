@@ -66,10 +66,7 @@ class MissavWebViewFetcher(private val context: Context) {
                     val target = url?.let { runCatching { Uri.parse(it) }.getOrNull() }
                     val targetHost = target?.host?.lowercase()
                     val targetScheme = target?.scheme?.lowercase()
-                    val ok = targetScheme == "https" &&
-                        (targetHost == "missav.ws" || targetHost == "missav.com" ||
-                            targetHost?.endsWith(".missav.ws") == true ||
-                            targetHost?.endsWith(".missav.com") == true)
+                    val ok = targetScheme == "https" && MissavUrls.isAllowedHost(targetHost)
                     if (!ok) {
                         Log.w(TAG, "blocked navigation to $url")
                         finish(null)

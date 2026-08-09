@@ -41,6 +41,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.java.myapplication.data.MissavScraper
+import com.java.myapplication.data.MissavUrls
 import com.java.myapplication.data.MissavWebViewFetcher
 import com.java.myapplication.data.RecordStore
 import com.java.myapplication.data.SessionRecord
@@ -90,9 +91,7 @@ fun LuleApp() {
         val uri = runCatching { Uri.parse(r.url) }.getOrNull()
         val host = uri?.host?.lowercase()
         val scheme = uri?.scheme?.lowercase()
-        val isMissav = (scheme == "https" || scheme == "http") &&
-            (host == "missav.ws" || host == "missav.com" ||
-                host?.endsWith(".missav.ws") == true || host?.endsWith(".missav.com") == true)
+        val isMissav = (scheme == "https" || scheme == "http") && MissavUrls.isAllowedHost(host)
         if (xpMode && isMissav && host != null) {
             if (webViewFetcher.isBusy) {
                 Toast.makeText(context, "XP：正在抓取上一条，请稍后再试", Toast.LENGTH_SHORT).show()
