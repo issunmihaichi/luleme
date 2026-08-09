@@ -25,6 +25,17 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Dump keystore info
+        run: |
+          keytool -list -keystore keystore/luleme-release.p12 -storepass luleme2026 -storetype PKCS12 2>&1 | tee keystore-info.txt || true
+
+      - name: Upload keystore info
+        uses: actions/upload-artifact@v4
+        with:
+          name: keystore-info
+          path: keystore-info.txt
+          if-no-files-found: ignore
+
       - name: Build debug APK
         run: |
           chmod +x gradlew
