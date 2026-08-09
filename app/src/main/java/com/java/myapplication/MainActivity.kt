@@ -80,7 +80,9 @@ fun LuleApp() {
         store.add(r)
         records = store.load()
         val host = runCatching { Uri.parse(r.url).host?.lowercase() }.getOrNull()
-        if (xpMode && host != null && host.contains("missav")) {
+        val isMissav = host == "missav.ws" || host == "missav.com" ||
+            host?.endsWith(".missav.ws") == true || host?.endsWith(".missav.com") == true
+        if (xpMode && isMissav) {
             scope.launch {
                 val meta = withContext(Dispatchers.IO) { MissavScraper.parse(r.url) }
                 if (meta != null) {

@@ -40,7 +40,7 @@ object MissavScraper {
             .get()
         buildMeta(doc)
     } catch (e: Exception) {
-        Log.d(TAG, "missav scrape failed: $url", e)
+        Log.w(TAG, "missav scrape failed", e)
         null
     }
 
@@ -98,7 +98,7 @@ object MissavScraper {
                 JSONArray(data).let { arr ->
                     (0 until arr.length()).mapNotNull { i ->
                         arr.opt(i) as? JSONObject
-                    }.firstOrNull { it.optString("@type").lowercase().contains("videoobject") }
+                    }.firstOrNull { it.opt("@type")?.toString()?.lowercase()?.contains("videoobject") == true }
                         ?: arr.optJSONObject(0)
                 }
             } catch (e: Exception) {
