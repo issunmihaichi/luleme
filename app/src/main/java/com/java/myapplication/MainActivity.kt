@@ -85,7 +85,10 @@ fun LuleApp() {
         if (xpMode && isMissav) {
             scope.launch {
                 val meta = withContext(Dispatchers.IO) { MissavScraper.parse(r.url) }
-                if (meta != null) {
+                // 仅当抓到至少一个有效字段时才回填，避免用空值覆盖用户已填内容
+                if (meta != null && (meta.title.isNotBlank() || meta.code.isNotBlank() ||
+                        meta.actress.isNotBlank() || meta.genres.isNotEmpty())
+                ) {
                     store.update(
                         r.copy(
                             title = meta.title,
