@@ -41,7 +41,7 @@ android {
         create("release") {
             storeFile = file("keystore/luleme-release.p12")
             storePassword = "luleme2026"
-            keyAlias = "1"
+            keyAlias = signingKeyAlias
             keyPassword = "luleme2026"
         }
     }
@@ -73,6 +73,15 @@ if (isArm64) {
             }
         }
     }
+}
+
+// 从固定 keystore 读取私钥条目别名（不硬编码，避免 PKCS12 别名不一致导致签名失败）
+val signingKeyAlias: String = try {
+    val ks = java.security.KeyStore.getInstance("PKCS12")
+    file("keystore/luleme-release.p12").inputStream().use { ks.load(it, "luleme2026".toCharArray()) }
+    ks.aliases().asSequence().firstOrNull { a -> ks.isKeyEntry(a) } ?: "1"
+} catch (e: Exception) {
+    "1"
 }
 
 dependencies {
