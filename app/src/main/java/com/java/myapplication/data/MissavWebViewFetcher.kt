@@ -3,6 +3,7 @@ package com.java.myapplication.data
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -53,9 +54,30 @@ class MissavWebViewFetcher(private val context: Context) {
         val wv = WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
-            settings.databaseEnabled = true
+            // 纵深防御：禁用 file/content 访问（targetSdk 35 默认禁 file，但显式声明更稳）
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            settings.allowFileAccessFromFileURLs = false
+            settings.allowUniversalAccessFromFileURLs = false
             // 使用系统默认 UA（真实浏览器指纹，利于通过 WAF）
             webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+                    // 保持 host 白名单语义：目标 host 必须仍属白名单且为 https，否则中止加载
+                    val target = url?.let { runCatching { Uri.parse(it) }.getOrNull() }
+                    val targetHost = target?.host?.lowercase()
+                    val targetScheme = target?.scheme?.lowercase()
+                    val ok = targetScheme == "https" &&
+                        (targetHost == "missav.ws" || targetHost == "missav.com" ||
+                            targetHost?.endsWith(".missav.ws") == true ||
+                            targetHost?.endsWith(".missav.com") == true)
+                    if (!ok) {
+                        Log.w(TAG, "blocked navigation to $url")
+                        finish(null)
+                        return true
+                    }
+                    return false
+                }
+
                 override fun onPageFinished(view: WebView?, url: String?) {
                     mainHandler.postDelayed({ tryExtract() }, RENDER_WAIT_MS)
                 }
