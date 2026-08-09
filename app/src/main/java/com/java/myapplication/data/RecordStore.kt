@@ -6,13 +6,18 @@ import org.json.JSONObject
 
 /**
  * 一条🦌记录：发生时间、时长（分钟）、备注、网页链接。
+ * XP 模式下抓取 missav 页面后可附带：标题、品番、女優、标签（ジャンル）。
  */
 data class SessionRecord(
     val id: Long,
     val timestamp: Long,   // 记录发生时间（epoch millis）
     val durationMin: Int,  // 时长（分钟）
     val note: String = "", // 备注
-    val url: String = ""   // 网页链接
+    val url: String = "",  // 网页链接
+    val title: String = "",   // XP：页面标题（名字）
+    val code: String = "",    // XP：品番
+    val actress: String = "", // XP：女優
+    val genres: List<String> = emptyList() // XP：ジャンル标签
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -20,6 +25,12 @@ data class SessionRecord(
         put("dur", durationMin)
         put("note", note)
         put("url", url)
+        if (title.isNotEmpty()) put("title", title)
+        if (code.isNotEmpty()) put("code", code)
+        if (actress.isNotEmpty()) put("actress", actress)
+        if (genres.isNotEmpty()) {
+            put("genres", JSONArray(genres))
+        }
     }
 
     companion object {
@@ -28,7 +39,14 @@ data class SessionRecord(
             timestamp = o.optLong("ts"),
             durationMin = o.optInt("dur"),
             note = o.optString("note"),
-            url = o.optString("url")
+            url = o.optString("url"),
+            title = o.optString("title"),
+            code = o.optString("code"),
+            actress = o.optString("actress"),
+            genres = runCatching {
+                val arr = o.optJSONArray("genres") ?: return@runCatching emptyList()
+                (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
+            }.getOrDefault(emptyList())
         )
     }
 }
@@ -59,6 +77,11 @@ class RecordStore(context: Context) {
 
     fun remove(id: Long) {
         save(load().filter { it.id != id })
+    }
+
+    /** 按 id 更新一条记录（用于后台抓取完成后回填 XP 元数据） */
+    fun update(record: SessionRecord) {
+        save(load().map { if (it.id == record.id) record else it })
     }
 
     fun clear() {
@@ -124,8 +147,18 @@ class RecordStore(context: Context) {
         prefs.edit().putString(KEY_RECORDS, arr.toString()).apply()
     }
 
+    /* ==================== XP 模式 ==================== */
+
+    /** XP 开关状态（抓取 missav 页面元数据） */
+    fun isXpMode(): Boolean = prefs.getBoolean(KEY_XP_MODE, false)
+
+    fun setXpMode(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_XP_MODE, enabled).apply()
+    }
+
     companion object {
         private const val PREFS_NAME = "luleme"
         private const val KEY_RECORDS = "records"
+        private const val KEY_XP_MODE = "xp_mode"
     }
 }

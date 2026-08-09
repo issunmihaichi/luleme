@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -44,6 +45,8 @@ import java.util.Locale
 fun SettingsScreen(
     recordCount: Int,
     totalMinutes: Int,
+    xpEnabled: Boolean,
+    onXpChange: (Boolean) -> Unit,
     onExportJson: () -> String,
     onImportJson: (json: String, replace: Boolean) -> Int,
     onClearData: () -> Unit,
@@ -148,6 +151,24 @@ fun SettingsScreen(
         ListItem(
             headlineContent = { Text("提醒") },
             supportingContent = { Text("按时🦌提醒（敬请期待）") }
+        )
+        HorizontalDivider()
+
+        // ===== XP 模式 =====
+        ListItem(
+            headlineContent = { Text("XP 模式") },
+            supportingContent = {
+                Text(
+                    if (xpEnabled) "开启：提交 missav 链接时自动抓取标题/品番/女優/标签"
+                    else "关闭：missav 链接仅存 URL"
+                )
+            },
+            trailingContent = {
+                Switch(
+                    checked = xpEnabled,
+                    onCheckedChange = onXpChange
+                )
+            }
         )
         HorizontalDivider()
 

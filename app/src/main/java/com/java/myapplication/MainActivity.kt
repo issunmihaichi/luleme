@@ -33,15 +33,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import com.java.myapplication.data.MissavScraper
 import com.java.myapplication.data.RecordStore
+import com.java.myapplication.data.SessionRecord
 import com.java.myapplication.ui.AddRecordDialog
 import com.java.myapplication.ui.HomeScreen
 import com.java.myapplication.ui.ReportScreen
 import com.java.myapplication.ui.SettingsScreen
 import com.java.myapplication.ui.theme.MyApplicationTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class AppPage { HOME, REPORT, SETTINGS }
 
@@ -62,9 +68,33 @@ class MainActivity : ComponentActivity() {
 fun LuleApp() {
     val context = LocalContext.current
     val store = remember { RecordStore(context.applicationContext) }
+    val scope = rememberCoroutineScope()
     var records by remember { mutableStateOf(store.load()) }
     var page by remember { mutableStateOf(AppPage.HOME) }
     var showAddDialog by remember { mutableStateOf(false) }
+    var xpMode by remember { mutableStateOf(store.isXpMode()) }
+
+    // 保存记录；XP 开启且 URL 含 missav 时，后台抓取页面元数据回填
+    val persistAndScrape: (SessionRecord) -> Unit = { r ->
+        store.add(r)
+        records = store.load()
+        if (xpMode && r.url.contains("missav", ignoreCase = true)) {
+            scope.launch {
+                val meta = withContext(Dispatchers.IO) { MissavScraper.parse(r.url) }
+                if (meta != null) {
+                    store.update(
+                        r.copy(
+                            title = meta.title,
+                            code = meta.code,
+                            actress = meta.actress,
+                            genres = meta.genres
+                        )
+                    )
+                    records = store.load()
+                }
+            }
+        }
+    }
 
     // 系统返回手势/返回键：在报表、设置页时回到主页而不是退出应用
     BackHandler(enabled = page != AppPage.HOME) {
@@ -114,10 +144,7 @@ fun LuleApp() {
                 when (p) {
                     AppPage.HOME -> HomeScreen(
                         records = records,
-                        onAdd = { r ->
-                            store.add(r)
-                            records = store.load()
-                        },
+                        onAdd = persistAndScrape,
                         onDelete = { id ->
                             store.remove(id)
                             records = store.load()
@@ -130,6 +157,11 @@ fun LuleApp() {
                     AppPage.SETTINGS -> SettingsScreen(
                         recordCount = records.size,
                         totalMinutes = records.sumOf { it.durationMin },
+                        xpEnabled = xpMode,
+                        onXpChange = { enabled ->
+                            store.setXpMode(enabled)
+                            xpMode = enabled
+                        },
                         onExportJson = { store.exportJson() },
                         onImportJson = { json, replace ->
                             val n = store.importJson(json, replace)
@@ -151,8 +183,7 @@ fun LuleApp() {
         AddRecordDialog(
             onDismiss = { showAddDialog = false },
             onSave = { r ->
-                store.add(r)
-                records = store.load()
+                persistAndScrape(r)
                 showAddDialog = false
             }
         )

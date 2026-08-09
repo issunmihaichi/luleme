@@ -91,6 +91,7 @@ fun ReportScreen(
 ) {
     var type by remember { mutableStateOf(ReportType.WEEK) }
     val stats = remember(records, type) { computeStats(records, type) }
+    val genres = remember(records, type) { collectGenres(records, type) }
 
     // 统计数字滚动动画（切换页签时旧值滚动到新值）
     val animCount by animateIntAsState(stats.count, tween(500), label = "count")
@@ -146,6 +147,7 @@ fun ReportScreen(
                 ReportContent(
                     type = t,
                     stats = stats,
+                    genres = genres,
                     count = animCount,
                     total = animTotal,
                     avg = animAvg,
@@ -160,6 +162,7 @@ fun ReportScreen(
 private fun ReportContent(
     type: ReportType,
     stats: ReportStats,
+    genres: List<String>,
     count: Int,
     total: Int,
     avg: Int,
@@ -251,6 +254,25 @@ private fun ReportContent(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+
+        // XP 标签（当前周期内 missav 记录解析出的ジャンル）
+        if (genres.isNotEmpty()) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        text = "XP 标签",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = genres.joinToString(" · "),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
@@ -435,3 +457,38 @@ private fun signed(n: Int) = if (n > 0) "+$n" else "$n"
 
 private fun percent(diff: Int, base: Int): String =
     String.format("%+.0f%%", diff * 100.0 / base)
+
+/** 收集当前周期（周/月/年）内所有记录解析出的 XP 标签，去重保序 */
+private fun collectGenres(records: List<SessionRecord>, type: ReportType): List<String> {
+    fun dayStart(c: Calendar): Calendar = c.apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }
+
+    val start: Calendar
+    val end: Calendar
+    when (type) {
+        ReportType.WEEK -> {
+            start = dayStart(Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_MONTH, -((get(Calendar.DAY_OF_WEEK) + 5) % 7))
+            })
+            end = (start.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 7) }
+        }
+        ReportType.MONTH -> {
+            start = dayStart(Calendar.getInstance().apply { set(Calendar.DAY_OF_MONTH, 1) })
+            end = (start.clone() as Calendar).apply { add(Calendar.MONTH, 1) }
+        }
+        ReportType.YEAR -> {
+            start = dayStart(Calendar.getInstance().apply { set(Calendar.DAY_OF_YEAR, 1) })
+            end = (start.clone() as Calendar).apply { add(Calendar.YEAR, 1) }
+        }
+    }
+    return records
+        .filter { it.timestamp in start.timeInMillis until end.timeInMillis }
+        .flatMap { it.genres }
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
