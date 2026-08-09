@@ -40,8 +40,10 @@ object MissavScraper {
             .followRedirects(false) // 保持 host 白名单语义，不跟随到白名单外域名
             .get()
         buildMeta(doc)
-    } catch (e: Exception) {
-        Log.w(TAG, "missav scrape failed", e)
+    } catch (e: Throwable) {
+        // 捕获 Throwable 兜底：深层嵌套 JSON-LD 等可能抛 Error（如 StackOverflowError），
+        // 不能让未捕获的 Error 在 IO 协程中崩溃应用
+        Log.w(TAG, "missav scrape failed: ${e.javaClass.simpleName}")
         null
     }
 

@@ -79,12 +79,19 @@ fun LuleApp() {
     val persistAndScrape: (SessionRecord) -> Unit = { r ->
         store.add(r)
         records = store.load()
-        val host = runCatching { Uri.parse(r.url).host?.lowercase() }.getOrNull()
-        val isMissav = host == "missav.ws" || host == "missav.com" ||
-            host?.endsWith(".missav.ws") == true || host?.endsWith(".missav.com") == true
-        if (xpMode && isMissav) {
+        val uri = runCatching { Uri.parse(r.url) }.getOrNull()
+        val host = uri?.host?.lowercase()
+        val scheme = uri?.scheme?.lowercase()
+        val isMissav = (scheme == "https" || scheme == "http") &&
+            (host == "missav.ws" || host == "missav.com" ||
+                host?.endsWith(".missav.ws") == true || host?.endsWith(".missav.com") == true)
+        if (xpMode && isMissav && host != null) {
+            // 用白名单校验过的 host 重建规范化 https URL，避免校验与请求解析器分歧
+            val path = uri.encodedPath.orEmpty()
+            val query = uri.encodedQuery?.let { "?$it" }.orEmpty()
+            val safeUrl = "https://$host$path$query"
             scope.launch {
-                val meta = withContext(Dispatchers.IO) { MissavScraper.parse(r.url) }
+                val meta = withContext(Dispatchers.IO) { MissavScraper.parse(safeUrl) }
                 // 仅当抓到至少一个有效字段时才回填，避免用空值覆盖用户已填内容
                 if (meta != null && (meta.title.isNotBlank() || meta.code.isNotBlank() ||
                         meta.actress.isNotBlank() || meta.genres.isNotEmpty())
