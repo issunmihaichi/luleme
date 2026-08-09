@@ -32,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -73,6 +74,10 @@ fun LuleApp() {
     val store = remember { RecordStore(context.applicationContext) }
     val scope = rememberCoroutineScope()
     val webViewFetcher = remember { MissavWebViewFetcher(context) }
+    // Activity 销毁时释放 WebView，防止泄漏（抓取最长约 34s）
+    DisposableEffect(Unit) {
+        onDispose { webViewFetcher.cancel() }
+    }
     var records by remember { mutableStateOf(store.load()) }
     var page by remember { mutableStateOf(AppPage.HOME) }
     var showAddDialog by remember { mutableStateOf(false) }
@@ -89,6 +94,10 @@ fun LuleApp() {
             (host == "missav.ws" || host == "missav.com" ||
                 host?.endsWith(".missav.ws") == true || host?.endsWith(".missav.com") == true)
         if (xpMode && isMissav && host != null) {
+            if (webViewFetcher.isBusy) {
+                Toast.makeText(context, "XP：正在抓取上一条，请稍后再试", Toast.LENGTH_SHORT).show()
+                return@persistAndScrape
+            }
             // 用白名单校验过的 host 重建规范化 https URL，避免校验与请求解析器分歧
             val path = uri.encodedPath.orEmpty()
             val query = uri.encodedQuery?.let { "?$it" }.orEmpty()

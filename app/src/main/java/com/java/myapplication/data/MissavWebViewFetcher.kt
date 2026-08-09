@@ -26,7 +26,11 @@ class MissavWebViewFetcher(private val context: Context) {
     private var webView: WebView? = null
     private var onResult: ((String?) -> Unit)? = null
     private var attempts = 0
+    private var extracting = false // 防止重定向多次 onPageFinished 并发 tryExtract
     private val pendingFinish = Runnable { finish(null) }
+
+    /** 是否正在抓取（供调用方决定是否提示"稍后再试"） */
+    val isBusy: Boolean get() = webView != null
 
     companion object {
         private const val TAG = "MissavWebViewFetcher"
@@ -69,9 +73,12 @@ class MissavWebViewFetcher(private val context: Context) {
 
     private fun tryExtract() {
         val wv = webView ?: return
+        if (extracting) return
+        extracting = true
         wv.evaluateJavascript(
             "(function(){return document.documentElement.outerHTML;})()"
         ) { htmlJson ->
+            extracting = false
             val html = decodeJsString(htmlJson)
             if (html == null || looksLikeChallengePage(html)) {
                 attempts++
@@ -99,12 +106,19 @@ class MissavWebViewFetcher(private val context: Context) {
 
     /** evaluateJavascript 返回值是 JSON 编码字符串（带引号与转义），还原为原始 HTML */
     private fun decodeJsString(json: String?): String? {
-        if (json.isNullOrBlank()) return null
+        if (json.isNullOrBlank() || json == "null") return null
         return try {
             JSONTokener(json).nextValue()?.toString()
         } catch (e: Exception) {
             Log.w(TAG, "decodeJsString failed")
             null
+        }
+    }
+
+    /** 释放 WebView（Activity 销毁时调用，防泄漏） */
+    fun cancel() {
+        mainHandler.post {
+            finish(null)
         }
     }
 
