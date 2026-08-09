@@ -1,5 +1,6 @@
 package com.java.myapplication
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -74,11 +75,12 @@ fun LuleApp() {
     var showAddDialog by remember { mutableStateOf(false) }
     var xpMode by remember { mutableStateOf(store.isXpMode()) }
 
-    // 保存记录；XP 开启且 URL 含 missav 时，后台抓取页面元数据回填
+    // 保存记录；XP 开启且 URL 域名含 missav 时，后台抓取页面元数据回填
     val persistAndScrape: (SessionRecord) -> Unit = { r ->
         store.add(r)
         records = store.load()
-        if (xpMode && r.url.contains("missav", ignoreCase = true)) {
+        val host = runCatching { Uri.parse(r.url).host?.lowercase() }.getOrNull()
+        if (xpMode && host != null && host.contains("missav")) {
             scope.launch {
                 val meta = withContext(Dispatchers.IO) { MissavScraper.parse(r.url) }
                 if (meta != null) {

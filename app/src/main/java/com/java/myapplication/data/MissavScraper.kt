@@ -1,5 +1,6 @@
 package com.java.myapplication.data
 
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
@@ -22,13 +23,15 @@ data class MissavMeta(
  */
 object MissavScraper {
 
+    private const val TAG = "MissavScraper"
+
     private const val USER_AGENT =
         "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36"
 
     private val CODE_REGEX =
-        Regex("\\b([A-Z]{2,8}-\\d{2,6}(?:-[A-Za-z0-9]+)*)\\b", RegexOption.IGNORE_CASE)
+        Regex("\\b([A-Z0-9]{2,10}-\\d{2,7}(?:-[A-Za-z0-9]+)*)\\b", RegexOption.IGNORE_CASE)
 
-    /** 同步阻塞抓取解析，应在 IO 线程调用 */
+    /** 同步阻塞抓取解析，应在 IO 线程调用；失败记录日志并返回 null */
     fun parse(url: String): MissavMeta? = try {
         val doc = Jsoup.connect(url)
             .timeout(10_000)
@@ -37,6 +40,7 @@ object MissavScraper {
             .get()
         buildMeta(doc)
     } catch (e: Exception) {
+        Log.d(TAG, "missav scrape failed: $url", e)
         null
     }
 
@@ -84,16 +88,22 @@ object MissavScraper {
         )
     }
 
-    /** 解析页面内 JSON-LD，返回第一个 VideoObject/Movie 对象 */
+    /** 解析页面内 JSON-LD，返回第一个 VideoObject/Movie 对象（兼容对象与数组两种形态） */
     private fun parseJsonLd(doc: Document): JSONObject? {
         doc.select("script[type=application/ld+json]").forEach { script ->
-            val data = script.data().trim().trimStart('[').trimEnd(']')
+            val data = script.data().trim()
             if (data.isEmpty()) return@forEach
+            // 先按数组处理（多对象/单元素），再按单对象处理
             val obj = try {
-                JSONObject(data)
+                JSONArray(data).let { arr ->
+                    (0 until arr.length()).mapNotNull { i ->
+                        arr.opt(i) as? JSONObject
+                    }.firstOrNull { it.optString("@type").lowercase().contains("videoobject") }
+                        ?: arr.optJSONObject(0)
+                }
             } catch (e: Exception) {
                 try {
-                    JSONArray(data).optJSONObject(0)
+                    JSONObject(data)
                 } catch (e2: Exception) {
                     null
                 }
