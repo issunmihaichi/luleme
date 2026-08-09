@@ -325,20 +325,34 @@ private fun RankSection(title: String, entries: List<RankEntry>, suffix: (RankEn
                 text = "${i + 1}.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.width(24.dp)
+                modifier = Modifier.width(20.dp)
             )
-            Text(
-                text = e.name,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            // 名称区：weight(1f) 占满剩余，超长 Ellipsis，绝不挤压右侧数值
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = e.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (e.subtitle.isNotBlank()) {
+                    Text(
+                        text = e.subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(Modifier.width(8.dp))
+            // 数值区：固定宽度不参与伸缩，始终完整显示
             Text(
                 text = suffix(e),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                maxLines = 1
             )
         }
     }
@@ -534,13 +548,18 @@ private fun collectGenres(records: List<SessionRecord>, type: ReportType): List<
         .distinct()
 }
 
-/** 排行榜数据：名称 → 次数/时长 */
-data class RankEntry(val name: String, val count: Int, val minutes: Int)
+/** 排行榜数据：名称 → 次数/时长/副标题 */
+data class RankEntry(
+    val name: String,
+    val count: Int,
+    val minutes: Int,
+    val subtitle: String = "" // 副标题（如女優对应的作品标题）
+)
 
 /**
  * 统计当前周期内各维度排行：
  * - byGenre:  按标签（ジャンル）出现次数
- * - byActress:按女優出现次数
+ * - byActress:按女優出现次数（附带作品标题）
  * - byDuration:按单次记录时长（Top N 单次最长）
  */
 private fun computeRankings(records: List<SessionRecord>, type: ReportType): Rankings {
@@ -548,7 +567,22 @@ private fun computeRankings(records: List<SessionRecord>, type: ReportType): Ran
     return Rankings(
         byGenre = rankByCount(cur.flatMap { r -> r.genres.map { it.trim() } }
             .filter { it.isNotBlank() }),
-        byActress = rankByCount(cur.map { it.actress.trim() }.filter { it.isNotBlank() }),
+        byActress = cur.map { it.actress.trim() }.filter { it.isNotBlank() }
+            .groupingBy { it }
+            .eachCount()
+            .toList()
+            .sortedWith(compareByDescending<Pair<String, Int>> { it.second }.thenBy { it.first })
+            .take(5)
+            .map { (actress, count) ->
+                // 副标题：该女優最近一条记录的作品标题/品番
+                val sample = cur.lastOrNull { it.actress.trim() == actress }
+                RankEntry(
+                    name = actress,
+                    count = count,
+                    minutes = 0,
+                    subtitle = sample?.title?.ifBlank { sample.code }.orEmpty()
+                )
+            },
         byDuration = cur.sortedByDescending { it.durationMin }
             .take(5)
             .mapIndexed { i, r -> RankEntry(
