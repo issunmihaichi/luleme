@@ -79,7 +79,9 @@ if (isArm64) {
 val signingKeyAlias: String = try {
     val ks = java.security.KeyStore.getInstance("PKCS12")
     file("keystore/luleme-release.p12").inputStream().use { ks.load(it, "luleme2026".toCharArray()) }
-    ks.aliases().asSequence().firstOrNull { a -> ks.isKeyEntry(a) } ?: "1"
+    val aliases = ks.aliases()
+    generateSequence { if (aliases.hasMoreElements()) aliases.nextElement() else null }
+        .firstOrNull { ks.isKeyEntry(it) } ?: "1"
 } catch (e: Exception) {
     "1"
 }
