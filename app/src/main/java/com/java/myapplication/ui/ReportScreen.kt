@@ -31,6 +31,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Label
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
@@ -39,6 +41,7 @@ import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -74,6 +77,8 @@ data class ReportStats(
     val avgMin: Int,
     val maxMin: Int,
     val minMin: Int,
+    val actressCount: Int, // 本周期不同女優数
+    val genreCount: Int,   // 本周期去重标签数
     val bucketLabels: List<String>,
     val bucketCounts: List<Int>,
     val bucketMinutes: List<Int>,
@@ -94,6 +99,7 @@ fun ReportScreen(
     val stats = remember(records, type) { computeStats(records, type) }
     val genres = remember(records, type) { collectGenres(records, type) }
     val rankings = remember(records, type) { computeRankings(records, type) }
+    val sessions = remember(records, type) { currentPeriod(records, type) }
 
     // 统计数字滚动动画（切换页签时旧值滚动到新值）
     val animCount by animateIntAsState(stats.count, tween(500), label = "count")
@@ -151,6 +157,7 @@ fun ReportScreen(
                     stats = stats,
                     genres = genres,
                     rankings = rankings,
+                    sessions = sessions,
                     count = animCount,
                     total = animTotal,
                     avg = animAvg,
@@ -167,6 +174,7 @@ private fun ReportContent(
     stats: ReportStats,
     genres: List<String>,
     rankings: Rankings,
+    sessions: List<SessionRecord>,
     count: Int,
     total: Int,
     avg: Int,
@@ -179,7 +187,7 @@ private fun ReportContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // 统计卡片 2x2
+        // 统计卡片 2x3
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatCard(Icons.Default.Star, "次数", "$count", Modifier.weight(1f))
             StatCard(Icons.Default.Timer, "总时长", "$total 分钟", Modifier.weight(1f))
@@ -187,6 +195,10 @@ private fun ReportContent(
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             StatCard(Icons.Default.Speed, "平均时长", "$avg 分钟", Modifier.weight(1f))
             StatCard(Icons.Default.EmojiEvents, "单次最长", "$max 分钟", Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            StatCard(Icons.Default.Face, "活跃女優", "$stats.actressCount 人", Modifier.weight(1f))
+            StatCard(Icons.Default.Label, "涉及标签", "$stats.genreCount 个", Modifier.weight(1f))
         }
 
         // 分布图
@@ -209,6 +221,32 @@ private fun ReportContent(
                     )
                 } else {
                     BarChart(labels = stats.bucketLabels, values = stats.bucketCounts)
+                }
+            }
+        }
+
+        // 作品清单：本周期每条 missav 记录（标题/女優/品番/时长/标签）
+        if (sessions.isNotEmpty()) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp)) {
+                    Text(
+                        text = "作品清单",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = "本${when (type) { ReportType.WEEK -> "周"; ReportType.MONTH -> "月"; ReportType.YEAR -> "年" }} ${sessions.size} 次记录",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    sessions.take(10).forEachIndexed { i, s ->
+                        SessionRow(s)
+                        if (i < sessions.size - 1 && i < 9) {
+                            HorizontalDivider()
+                        }
+                    }
                 }
             }
         }
@@ -266,7 +304,7 @@ private fun ReportContent(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
                     Text(
-                        text = "XP 标签",
+                        text = "热门标签",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -358,9 +396,56 @@ private fun RankSection(title: String, entries: List<RankEntry>, suffix: (RankEn
     }
 }
 
+/** 作品清单单行：标题 + 女優/品番/时长 + 标签 */
 @Composable
-private fun StatCard(icon: ImageVector, label: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
+private fun SessionRow(s: SessionRecord) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = s.title.ifBlank { s.code }.ifBlank { s.note }.ifBlank { "未命名" },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = "${s.durationMin}分钟",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Medium
+            )
+        }
+        // 女優 / 品番 行
+        val meta = listOf(s.actress.takeIf { it.isNotBlank() }, s.code.takeIf { it.isNotBlank() })
+            .filterNotNull()
+            .joinToString(" · ")
+        if (meta.isNotBlank()) {
+            Text(
+                text = meta,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        // 标签行（前 3 个）
+        val tags = s.genres.take(3)
+        if (tags.isNotEmpty()) {
+            Text(
+                text = tags.joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatCard(icon: ImageVector, label: String, value: String, modifier: Modifier = Modifier) {    Card(modifier = modifier) {
         Row(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -524,6 +609,8 @@ private fun computeStats(records: List<SessionRecord>, type: ReportType): Report
         avgMin = if (cur.isNotEmpty()) (total.toDouble() / cur.size).roundToInt() else 0,
         maxMin = cur.maxOfOrNull { it.durationMin } ?: 0,
         minMin = cur.minOfOrNull { it.durationMin } ?: 0,
+        actressCount = cur.map { it.actress.trim() }.filter { it.isNotBlank() }.distinct().size,
+        genreCount = cur.flatMap { it.genres }.map { it.trim() }.filter { it.isNotBlank() }.distinct().size,
         bucketLabels = labels,
         bucketCounts = counts,
         bucketMinutes = minutes,
@@ -538,14 +625,18 @@ private fun signed(n: Int) = if (n > 0) "+$n" else "$n"
 private fun percent(diff: Int, base: Int): String =
     String.format("%+.0f%%", diff * 100.0 / base)
 
-/** 收集当前周期（周/月/年）内所有记录解析出的 XP 标签，去重保序 */
+/** 收集当前周期（周/月/年）内出现≥2次的热门标签（去重保序） */
 private fun collectGenres(records: List<SessionRecord>, type: ReportType): List<String> {
     val cur = currentPeriod(records, type)
     return cur
         .flatMap { it.genres }
         .map { it.trim() }
         .filter { it.isNotBlank() }
-        .distinct()
+        .groupingBy { it }
+        .eachCount()
+        .filterValues { it >= 2 } // 仅热门标签（≥2次）
+        .keys
+        .toList()
 }
 
 /** 排行榜数据：名称 → 次数/时长/副标题 */
